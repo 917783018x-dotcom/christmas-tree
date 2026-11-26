@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>🎄 3D 粒子圣诞树 · Merry Christmas</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { width:100%; height:100%; overflow:hidden; background:#050914; font-family:"PingFang SC","Microsoft YaHei",sans-serif; }
+  #scene { position:fixed; inset:0; }
+  .title {
+    position:fixed; top:5vh; left:0; right:0; text-align:center; pointer-events:none; z-index:5;
+    color:#ffe9a8; text-shadow:0 0 18px rgba(255,190,60,.85), 0 0 46px rgba(255,120,40,.45);
+  }
+  .title h1 { font-size:clamp(26px,6vw,52px); letter-spacing:.14em; font-weight:700; }
+  .title p { margin-top:8px; font-size:clamp(12px,2.6vw,16px); color:#cfe3ff; opacity:.85; letter-spacing:.3em; }
+  .bar {
+    position:fixed; bottom:4.5vh; left:0; right:0; display:flex; justify-content:center; gap:12px; z-index:5;
+  }
+  .bar button {
+    border:1px solid rgba(255,220,130,.55); color:#ffe9a8; background:rgba(16,24,48,.55);
+    padding:10px 22px; border-radius:999px; font-size:15px; letter-spacing:.12em; cursor:pointer;
+    backdrop-filter:blur(6px); transition:all .2s;
+  }
+  .bar button:hover, .bar button:active { background:rgba(255,190,60,.25); transform:translateY(-1px); }
+  .hint { position:fixed; bottom:1.4vh; left:0; right:0; text-align:center; color:#8fa8cc; font-size:12px; z-index:5; pointer-events:none; letter-spacing:.15em; }
+</style>
+</head>
+<body>
+<div id="scene"></div>
+<div class="title">
+  <h1>🎄 Merry Christmas</h1>
+  <p>圣 诞 快 乐</p>
+</div>
+<div class="bar">
+  <button id="btnMorph">✨ 打散 / 聚合</button>
+  <button id="btnSnow">❄️ 雪花开关</button>
+</div>
+<div class="hint">拖动旋转 · 滚轮缩放</div>
+
+<script type="importmap">
+{ "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+               "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/" } }
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+const container = document.getElementById('scene');
+const scene = new THREE.Scene();
+scene.fog = new THREE.FogExp2(0x050914, 0.012);
+
+const camera = new THREE.PerspectiveCamera(55, innerWidth/innerHeight, 0.1, 300);
+camera.position.set(0, 13, 42);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+container.appendChild(renderer.domElement);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(0, 10, 0);
+controls.enableDamping = true;
+controls.autoRotate = true;
+controls.autoRotateSpeed = 0.9;
+controls.minDistance = 15; controls.maxDistance = 90;
+
+/* ---------- 圣诞树粒子（树形 <-> 混沌球 双形态） ---------- */
+const COUNT = 12000;
+const HEIGHT = 24, RADIUS = 10.5;
+const treePos = new Float32Array(COUNT*3);
+const chaosPos = new Float32Array(COUNT*3);
+const colors = new Float32Array(COUNT*3);
+const sizes = new Float32Array(COUNT);
+const GOLDEN = Math.PI * (3 - Math.sqrt(5));
+
+const cGreen1 = new THREE.Color(0x1fae5f), cGreen2 = new THREE.Color(0x7be495);
+const cGold = new THREE.Color(0xffc94d), cRed = new THREE.Color(0xff4d5e), cPink = new THREE.Color(0xff8fb3);
+const tmp = new THREE.Color();
+
+for (let i=0; i<COUNT; i++){
+  // 树形：斐波那契螺旋投影到圆锥面 + 少量内部填充
+  const t = i / COUNT;                       // 0 底部 -> 1 顶部
+  const y = t * HEIGHT;
+  const r = RADIUS * (1 - t) * (0.82 + Math.random()*0.30);
+  const a = i * GOLDEN + t * Math.PI * 2;
+  treePos[i*3]   = Math.cos(a) * r;
+  treePos[i*3+1] = y;
+  treePos[i*3+2] = Math.sin(a) * r;
+  // 混沌形：球面随机散布
+  const u = Math.random()*2-1, th = Math.random()*Math.PI*2;
+  const rr = 13 + Math.random()*7, s = Math.sqrt(1-u*u);
+  chaosPos[i*3]   = rr * s * Math.cos(th);
+  chaosPos[i*3+1] = rr * u + HEIGHT*0.52;
+  chaosPos[i*3+2] = rr * s * Math.sin(th);
+  // 颜色：以绿色为主，点缀金/红/粉彩灯
+  const roll = Math.random();
+  if (roll < 0.06) tmp.copy(cGold);
+  else if (roll < 0.10) tmp.copy(cRed);
+  else if (roll < 0.125) tmp.copy(cPink);
+  else tmp.copy(cGreen1).lerp(cGreen2, Math.random());
+  colors[i*3]=tmp.r; colors[i*3+1]=tmp.g; colors[i*3+2]=tmp.b;
+  sizes[i] = roll < 0.125 ? 0.55 + Math.random()*0.5 : 0.30 + Math.random()*0.35;
+}
+
+const geo = new THREE.BufferGeometry();
+geo.setAttribute('position', new THREE.BufferAttribute(treePos.slice(), 3));
+geo.setAttribute('aColor', new THREE.BufferAttribute(colors, 3));
+geo.setAttribute('aSize', new THREE.BufferAttribute(sizes, 1));
+
+const mat = new THREE.ShaderMaterial({
+  transparent:true, depthWrite:false, blending:THREE.AdditiveBlending,
+  uniforms:{ uTime:{value:0} },
+  vertexShader:`
+    attribute vec3 aColor; attribute float aSize;
+    varying vec3 vColor; uniform float uTime;
+    void main(){
+      vColor = aColor;
+      vec3 p = position;
+      p.x += sin(uTime*1.4 + position.y*0.55) * 0.12;
+      p.z += cos(uTime*1.1 + position.y*0.45) * 0.12;
+      vec4 mv = modelViewMatrix * vec4(p,1.0);
+      float tw = 0.82 + 0.30 * sin(uTime*2.4 + position.x*1.7 + position.y*2.3);
+      gl_PointSize = aSize * tw * (170.0 / -mv.z);
+      gl_Position = projectionMatrix * mv;
+    }`,
+  fragmentShader:`
+    varying vec3 vColor;
+    void main(){
+      float d = length(gl_PointCoord - 0.5);
+      float alpha = smoothstep(0.5, 0.05, d);
+      gl_FragColor = vec4(vColor, alpha);
+    }`
+});
+const tree = new THREE.Points(geo, mat);
+scene.add(tree);
+
+/* ---------- 树干 ---------- */
+const trunk = new THREE.Mesh(
+  new THREE.CylinderGeometry(0.9, 1.3, 3.2, 10),
+  new THREE.MeshStandardMaterial({ color:0x6b4226, roughness:0.9 })
+);
+trunk.position.y = -1.2;
+scene.add(trunk);
+
+/* ---------- 树顶星星 ---------- */
+function starShape(R, r, points=5){
+  const shape = new THREE.Shape();
+  for (let i=0;i<points*2;i++){
+    const rad = i%2===0 ? R : r;
+    const ang = (i/(points*2))*Math.PI*2 - Math.PI/2;
+    const x = Math.cos(ang)*rad, y = Math.sin(ang)*rad;
+    i===0 ? shape.moveTo(x,y) : shape.lineTo(x,y);
+  }
+  shape.closePath();
+  return shape;
+}
+const star = new THREE.Mesh(
+  new THREE.ExtrudeGeometry(starShape(2.0, 0.85), { depth:0.45, bevelEnabled:true, bevelSize:0.12, bevelThickness:0.12 }),
+  new THREE.MeshStandardMaterial({ color:0xffd34d, emissive:0xffaa00, emissiveIntensity:1.6, metalness:0.7, roughness:0.25 })
+);
+star.position.set(0, HEIGHT + 1.4, -0.2);
+scene.add(star);
+const starLight = new THREE.PointLight(0xffc266, 60, 40);
+starLight.position.set(0, HEIGHT + 1.6, 0);
+scene.add(starLight);
+scene.add(new THREE.AmbientLight(0x8899ff, 0.5));
+
+/* ---------- 地面光晕 ---------- */
+const ground = new THREE.Mesh(
+  new THREE.CircleGeometry(17, 48),
+  new THREE.MeshBasicMaterial({ color:0x1b3a6b, transparent:true, opacity:0.35 })
+);
+ground.rotation.x = -Math.PI/2; ground.position.y = -2.85;
+scene.add(ground);
+
+/* ---------- 雪花 ---------- */
+const SNOW = 900;
+const snowPos = new Float32Array(SNOW*3);
+for (let i=0;i<SNOW;i++){
+  snowPos[i*3] = (Math.random()-0.5)*110;
+  snowPos[i*3+1] = Math.random()*55;
+  snowPos[i*3+2] = (Math.random()-0.5)*110;
+}
+const snowGeo = new THREE.BufferGeometry();
+snowGeo.setAttribute('position', new THREE.BufferAttribute(snowPos, 3));
+const snow = new THREE.Points(snowGeo, new THREE.PointsMaterial({
+  color:0xffffff, size:0.35, transparent:true, opacity:0.85, depthWrite:false
+}));
+scene.add(snow);
+
+/* ---------- 形态切换 ---------- */
+let morph = 0;            // 0=树形 1=混沌
+let morphTarget = 0;
+const posAttr = geo.getAttribute('position');
+function applyMorph(){
+  for (let i=0;i<COUNT*3;i++){
+    posAttr.array[i] = treePos[i] + (chaosPos[i]-treePos[i]) * morph;
+  }
+  posAttr.needsUpdate = true;
+}
+document.getElementById('btnMorph').addEventListener('click', ()=>{ morphTarget = morphTarget===0 ? 1 : 0; });
+document.getElementById('btnSnow').addEventListener('click', ()=>{ snow.visible = !snow.visible; });
+
+/* ---------- 动画 ---------- */
+const clock = new THREE.Clock();
+function animate(){
+  requestAnimationFrame(animate);
+  const t = clock.getElapsedTime();
+  mat.uniforms.uTime.value = t;
+  morph += (morphTarget - morph) * 0.035;
+  if (Math.abs(morphTarget - morph) > 0.0005) applyMorph();
+  star.rotation.y = t * 0.9;
+  starLight.intensity = 55 + Math.sin(t*2.6)*18;
+  const sp = snowGeo.getAttribute('position');
+  for (let i=0;i<SNOW;i++){
+    let y = sp.getY(i) - 0.045 - (i%5)*0.006;
+    if (y < -3) y = 52;
+    sp.setY(i, y);
+    sp.setX(i, sp.getX(i) + Math.sin(t*0.8 + i)*0.008);
+  }
+  sp.needsUpdate = true;
+  controls.update();
+  renderer.render(scene, camera);
+}
+animate();
+
+addEventListener('resize', ()=>{
+  camera.aspect = innerWidth/innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+</script>
+</body>
+</html>
